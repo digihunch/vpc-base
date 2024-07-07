@@ -1,16 +1,26 @@
+# VPC-base
 
-The purpose of this example is to separate network stack from EKS cluster.
-1. It creates networking stack for EKS cluster with Terraform, with bastion host
-2. The terraform output also specifies the eksctl command to create a cluster
-3. It creates a private EKS cluster using eksctl with Fargate profile. 
+I use this project is to provision the networking stack as the infrastructure foundation for my other project. It creates a VPC with the following subnets:
 
-Use this stack to create private cluster with Fargate provile and minimized standing cost.
+| Purpose   |      AZ1      | AZ2 |AZ3|
+|----------|:-------------:|------:|---:|
+| Public Subnet with NAT Gateway | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Internal Service Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Data Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Node Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Pod Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
-1 x Bastion EC2
-1 x EKS control plane
-1 x Fargate 
-3 x NAT Gateway
+The stack assumes a high availability requirement in the given region and therefore it straddles across 3 availability zones (AZs). As a result it creates a NAT gateway in each AZ. They are all connected to a single Internet Gateway instance associated with the VPC.
 
+In addition, the stack creates a Bastion host. The Bastion host is part of an autoscaling group for resiliency. It uploads the public key as specified during provisioning. The Bastion host is on the internal service subnet, which is private. It connects to AWS SSM endpoint via Internet, allowing 
+
+
+The project was originally used for creating networking foundation for creating EKS cluster using `eksctl`. Therefore many resources are tagged with Kubernetes well-known labels. However, it can serve as the foundation for any other project on top of a highly available VPC and a bastion host.
+
+
+## How to use the template
+
+Simply play the Terraform trilogy:
 ```sh
 terraform init
 terraform plan
@@ -20,14 +30,23 @@ terraform apply
 # 1. Bastion Host instance ID
 # 2. Bastion Host Security Group ID
 # 3. Next set of commands to set environment variable
+```
+The output displays a few additional commands for the next steps for the EKS cluster usecase.
+
+## Use case 1. Create a private EKS cluster with Fargate using `eksctl`
+
+The original use case of this project is to create a private EKS cluster from the [cloudkube](https://github.com/digihunch/cloudkube) project. Once the `apply` step is completed, run the command given on the screen to set environment variables. Then use them to populate the template file:
+
+```sh
 # Load the environment variables, then create private cluster using eksctl
 envsubst < private-cluster.yaml.tmpl | tee | eksctl create cluster -f -
 ```
+
 Cluster creation may take more than 20 minutes, with public endpoint disabled at the end and no access to cluster endpoint from outside of the VPC. 
 
-Then use SOCKS5 proxy to connect from outside of VPC: 
+To access the cluster, you may use SOCKS5 proxy to connect from outside of VPC: 
 
-``````
+```
 BASTION_SECURITY_GROUP_ID=$(terraform output -raw bastion_sg_id)
 CLUSTER_SECURITY_GROUP_ID=$(aws eks describe-cluster --name private-cluster --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
  
@@ -50,3 +69,14 @@ export HTTPS_PROXY=socks5://localhost:1080
  
 kubectl get node
 ```
+
+Review [this post](https://www.digihunch.com/2023/06/connect-kubectl-to-private-kubernetes-cluster-in-eks-and-aks/) for more details on how the connectivity work in this model.
+
+## Use case 2. Create VM for running chat service
+The bastion host can serve as any VM that you need for testing. For example, the [chat-service](https://github.com/digihunch/chat-service) project requires an EC2 instance with GPU. You may use this project by specifying parameters:
+```sh
+export TF_VAR_instance_type=g4dn.xlarge
+export AWS_REGION=us-east-1
+export TF_VAR_preferred_ami_id=ami-04b70fa74e45c3917
+```
+Make sure that the preferred AMI ID parameter is an AMI that exists in the specified AWS region. Then run the terraform trilogy and disregard the instructions for other use cases.
