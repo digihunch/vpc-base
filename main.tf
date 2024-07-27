@@ -3,21 +3,16 @@ resource "aws_key_pair" "ssh_pubkey" {
   public_key = var.pubkey_data != null ? var.pubkey_data : (fileexists(var.pubkey_path) ? file(var.pubkey_path) : "")
 }
 
-resource "aws_vpc" "vpc" {
+resource "aws_vpc" "base_vpc" {
   cidr_block           = var.vpc_cidr_block
   instance_tenancy     = "default"
   enable_dns_hostnames = true
   tags                 = { Name = "${var.resource_prefix}-MainVPC" }
 }
 
-resource "aws_default_security_group" "defaultsg" {
-  vpc_id = aws_vpc.vpc.id
-  tags   = { Name = "${var.resource_prefix}-DefaultSG" }
-}
-
 resource "aws_subnet" "public_subnets" {
   count                   = length(var.public_subnets_cidr_list)
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.base_vpc.id
   cidr_block              = var.public_subnets_cidr_list[count.index]
   map_public_ip_on_launch = true
   availability_zone       = data.aws_availability_zones.this.names[count.index]
@@ -26,7 +21,7 @@ resource "aws_subnet" "public_subnets" {
 
 resource "aws_subnet" "internal_subnets" {
   count                   = length(var.internal_subnets_cidr_list)
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.base_vpc.id
   cidr_block              = var.internal_subnets_cidr_list[count.index]
   map_public_ip_on_launch = false
   availability_zone       = data.aws_availability_zones.this.names[count.index]
@@ -35,7 +30,7 @@ resource "aws_subnet" "internal_subnets" {
 
 resource "aws_subnet" "node_subnets" {
   count                   = length(var.node_subnets_cidr_list)
-  vpc_id                  = aws_vpc.vpc.id
+  vpc_id                  = aws_vpc.base_vpc.id
   cidr_block              = var.node_subnets_cidr_list[count.index]
   map_public_ip_on_launch = false
   availability_zone       = data.aws_availability_zones.this.names[count.index]
@@ -46,7 +41,7 @@ resource "null_resource" "this" {
   provisioner "local-exec" {
     command = <<-EOF
       export EKS_REGION=${data.aws_region.this.name}
-      export VPC_ID=${aws_vpc.vpc.id}
+      export VPC_ID=${aws_vpc.base_vpc.id}
       export EKS_AZ1=${aws_subnet.node_subnets[0].availability_zone}
       export EKS_AZ2=${aws_subnet.node_subnets[1].availability_zone}
       export EKS_AZ3=${aws_subnet.node_subnets[2].availability_zone}
@@ -60,7 +55,7 @@ resource "null_resource" "this" {
 }
 
 resource "aws_internet_gateway" "internet_gw" {
-  vpc_id = aws_vpc.vpc.id
+  vpc_id = aws_vpc.base_vpc.id
   tags   = { Name = "${var.resource_prefix}-InternetGateway" }
 }
 
@@ -78,7 +73,7 @@ resource "aws_nat_gateway" "nat_gws" {
 }
 
 resource "aws_route_table" "public_route_table" {
-  vpc_id = aws_vpc.vpc.id
+  vpc_id = aws_vpc.base_vpc.id
   tags   = { Name = "${var.resource_prefix}-PublicRouteTable" }
 }
 
@@ -88,11 +83,6 @@ resource "aws_route" "public_internet_gateway" {
   gateway_id             = aws_internet_gateway.internet_gw.id
 }
 
-resource "aws_main_route_table_association" "vpc_rt_assoc" {
-  vpc_id         = aws_vpc.vpc.id
-  route_table_id = aws_route_table.public_route_table.id
-}
-
 resource "aws_route_table_association" "pubsub_rt_assoc" {
   count          = length(var.public_subnets_cidr_list)
   subnet_id      = aws_subnet.public_subnets[count.index].id
@@ -100,7 +90,7 @@ resource "aws_route_table_association" "pubsub_rt_assoc" {
 }
 
 resource "aws_route_table" "priv2nat_subnet_route_tables" {
-  vpc_id = aws_vpc.vpc.id
+  vpc_id = aws_vpc.base_vpc.id
   count  = length(var.public_subnets_cidr_list)
   tags   = { Name = "${var.resource_prefix}-PrivateToNATSubnetRouteTable${count.index}" }
 }
@@ -126,7 +116,7 @@ resource "aws_route_table_association" "internal_rt_assocs" {
 resource "aws_security_group" "bastionsecgrp" {
   name        = "${var.resource_prefix}-cloudkube-sg"
   description = "security group for bastion"
-  vpc_id      = aws_vpc.vpc.id
+  vpc_id      = aws_vpc.base_vpc.id
 
   egress {
     description = "Outbound"
