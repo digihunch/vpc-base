@@ -7,7 +7,7 @@ output "vpc_cidr" {
 output "node_subnets_ids" {
   value = join(",", aws_subnet.node_subnets.*.id)
 }
-output "bastion_sg_id" {
+output "bastion_sgid" {
   value = aws_security_group.bastionsecgrp.id
 }
 output "eksctl_command" {
