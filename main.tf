@@ -56,7 +56,7 @@ resource "null_resource" "this" {
       envsubst < template/private-cluster.yaml.tmpl > out/private-cluster.yaml
     EOF
   }
-  depends_on = [ aws_subnet.node_subnets ]
+  depends_on = [aws_subnet.node_subnets]
 }
 
 resource "aws_internet_gateway" "internet_gw" {
@@ -123,7 +123,6 @@ resource "aws_route_table_association" "internal_rt_assocs" {
   route_table_id = aws_route_table.priv2nat_subnet_route_tables[count.index].id
 }
 
-
 resource "aws_security_group" "bastionsecgrp" {
   name        = "${var.resource_prefix}-cloudkube-sg"
   description = "security group for bastion"
@@ -138,7 +137,6 @@ resource "aws_security_group" "bastionsecgrp" {
   }
   tags = { Name = "${var.resource_prefix}-BastionSecurityGroup" }
 }
-
 
 resource "aws_iam_role" "bastion_instance_role" {
   name = "${var.resource_prefix}-bastion-inst-role"
@@ -162,30 +160,30 @@ resource "aws_iam_policy" "bastion_eks_policy" {
   name        = "${var.resource_prefix}-bastion_eks_policy"
   description = "bastion to allow awscli administrative activities from instance role."
   policy      = <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Action": [
-        "eks:Describe*",
-        "eks:List*",
-        "appmesh:*"
-      ],
-      "Effect": "Allow",
-      "Resource": "*"
-    },
-    {
-      "Action": [
-        "iam:CreatePolicy",
-        "iam:ListPolicies",
-        "sts:DecodeAuthorizationMessage"
-      ],
-      "Effect": "Allow",
-      "Resource": "*"
-    }
-  ]
-}
-EOF
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Action": [
+          "eks:Describe*",
+          "eks:List*",
+          "appmesh:*"
+        ],
+        "Effect": "Allow",
+        "Resource": "*"
+      },
+      {
+        "Action": [
+          "iam:CreatePolicy",
+          "iam:ListPolicies",
+          "sts:DecodeAuthorizationMessage"
+        ],
+        "Effect": "Allow",
+        "Resource": "*"
+      }
+    ]
+  }
+  EOF
 }
 
 resource "aws_iam_role_policy_attachment" "bastion_role_eks_policy_attachment" {
@@ -248,4 +246,3 @@ resource "aws_autoscaling_group" "bastion_host_asg" {
     version = aws_launch_template.bastion_launch_template.latest_version
   }
 }
-
