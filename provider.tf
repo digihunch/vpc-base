@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.31.0"
+      version = "~> 5.59.0"
     }
   }
   required_version = ">= 1.6.6"
@@ -15,4 +15,11 @@ provider "aws" {
   # export AWS_DEFAULT_REGION= 
   # export AWS_PROFILE=
   # export AWS_REGION=
+  default_tags {
+    tags = {
+      Environment = var.common_tags.Environment
+      Owner       = var.common_tags.Owner
+      Application = "vpc-base"
+    }
+  }
 }

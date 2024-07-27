@@ -3,7 +3,7 @@ kind: ClusterConfig
 metadata:
   name: private-cluster
   region: $EKS_REGION 
-  version: "1.28"
+  version: "1.30"
 privateCluster:
   enabled: true 
   additionalEndpointServices:
@@ -11,7 +11,7 @@ privateCluster:
   - "autoscaling"
   - "logs"
 vpc:
-  id: "$EKS_VPC_ID"
+  id: "$VPC_ID"
   subnets:
     private:
       $EKS_AZ1:

@@ -40,7 +40,7 @@ data "cloudinit_config" "bastion_cloudinit" {
   base64_encode = true
   part {
     content_type = "text/x-shellscript"
-    content = templatefile("${path.module}/myuserdata.tpl", {
+    content = templatefile("${path.module}/template/userdata.tpl", {
       aws_region = data.aws_region.this.name
     })
   }

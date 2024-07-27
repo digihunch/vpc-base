@@ -5,14 +5,12 @@ I use this project is to provision the networking stack as the infrastructure fo
 | Purpose   |      AZ1      | AZ2 |AZ3|
 |----------|:-------------:|------:|---:|
 | Public Subnet with NAT Gateway | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Internal Service Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Data Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| Internal Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | Node Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| Pod Subnet (Private) | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
 The stack assumes a high availability requirement in the given region and therefore it straddles across 3 availability zones (AZs). As a result it creates a NAT gateway in each AZ. They are all connected to a single Internet Gateway instance associated with the VPC.
 
-In addition, the stack creates a Bastion host. The Bastion host is part of an autoscaling group for resiliency. It uploads the public key as specified during provisioning. The Bastion host is on the internal service subnet, which is private. It connects to AWS SSM endpoint via Internet, allowing 
+In addition, the stack creates a Bastion host. The Bastion host is part of an autoscaling group for resiliency. It uploads the public key as specified during provisioning. The Bastion host is on the internal subnet, which is private. It connects to AWS SSM endpoint via Internet, allowing 
 
 
 The project was originally used for creating networking foundation for creating EKS cluster using `eksctl`. Therefore many resources are tagged with Kubernetes well-known labels. However, it can serve as the foundation for any other project on top of a highly available VPC and a bastion host.
