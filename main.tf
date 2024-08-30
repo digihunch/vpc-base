@@ -67,7 +67,8 @@ resource "local_file" "eksctl_yaml" {
     vpc_id      = aws_vpc.base.id
     nodesubnets = { for k, sn in aws_subnet.node_subnets : sn.availability_zone => sn.id }
   })
-  file_permission = "0644"
+  file_permission      = "0644"
+  directory_permission = "0755"
 }
 
 resource "aws_eip" "nat_eips" {
