@@ -34,8 +34,8 @@ data "aws_instances" "bastion" {
     Name    = "${var.resource_prefix}-bastion"
   }
   filter {
-    name = "instance-state-name"
-    values = ["pending","running"]
+    name   = "instance-state-name"
+    values = ["pending", "running"]
   }
   depends_on = [aws_autoscaling_group.bastion_host_asg]
 }

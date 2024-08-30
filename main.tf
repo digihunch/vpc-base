@@ -10,66 +10,83 @@ resource "aws_vpc" "base_vpc" {
   tags                 = { Name = "${var.resource_prefix}-MainVPC" }
 }
 
-resource "aws_subnet" "public_subnets" {
-  count                   = length(var.public_subnets_cidr_list)
-  vpc_id                  = aws_vpc.base_vpc.id
-  cidr_block              = var.public_subnets_cidr_list[count.index]
-  map_public_ip_on_launch = true
-  availability_zone       = data.aws_availability_zones.this.names[count.index]
-  tags                    = { Name = "${var.resource_prefix}-PublicSubnet${count.index}", "kubernetes.io/role/elb" = 1 }
-}
-
-resource "aws_subnet" "internal_subnets" {
-  count                   = length(var.internal_subnets_cidr_list)
-  vpc_id                  = aws_vpc.base_vpc.id
-  cidr_block              = var.internal_subnets_cidr_list[count.index]
-  map_public_ip_on_launch = false
-  availability_zone       = data.aws_availability_zones.this.names[count.index]
-  tags                    = { Name = "${var.resource_prefix}-InternalSubnet${count.index}", "kubernetes.io/role/internal-elb" = 1 }
-}
-
-resource "aws_subnet" "node_subnets" {
-  count                   = length(var.node_subnets_cidr_list)
-  vpc_id                  = aws_vpc.base_vpc.id
-  cidr_block              = var.node_subnets_cidr_list[count.index]
-  map_public_ip_on_launch = false
-  availability_zone       = data.aws_availability_zones.this.names[count.index]
-  tags                    = { Name = "${var.resource_prefix}-NodeSubnet${count.index}" }
-}
-
-resource "null_resource" "this" {
-  provisioner "local-exec" {
-    command = <<-EOF
-      export EKS_REGION=${data.aws_region.this.name}
-      export VPC_ID=${aws_vpc.base_vpc.id}
-      export EKS_AZ1=${aws_subnet.node_subnets[0].availability_zone}
-      export EKS_AZ2=${aws_subnet.node_subnets[1].availability_zone}
-      export EKS_AZ3=${aws_subnet.node_subnets[2].availability_zone}
-      export EKS_SUBNET_ID1=${aws_subnet.node_subnets[0].id}
-      export EKS_SUBNET_ID2=${aws_subnet.node_subnets[1].id}
-      export EKS_SUBNET_ID3=${aws_subnet.node_subnets[2].id}
-      envsubst < template/private-cluster.yaml.tmpl > out/private-cluster.yaml
-    EOF
-  }
-  depends_on = [aws_subnet.node_subnets]
-}
-
 resource "aws_internet_gateway" "internet_gw" {
   vpc_id = aws_vpc.base_vpc.id
   tags   = { Name = "${var.resource_prefix}-InternetGateway" }
 }
 
-resource "aws_eip" "nat_eips" {
-  count  = length(var.public_subnets_cidr_list)
-  domain = "vpc"
+resource "aws_subnet" "public_subnets" {
+  for_each = {
+    for cidr in var.public_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(var.public_subnets_cidr_list, cidr)], -2, -1) => {
+      subnet_cidr_block = cidr
+      availability_zone = data.aws_availability_zones.this.names[index(var.public_subnets_cidr_list, cidr)]
+    }
+  }
+  vpc_id                  = aws_vpc.base_vpc.id
+  cidr_block              = each.value.subnet_cidr_block
+  map_public_ip_on_launch = true
+  availability_zone       = each.value.availability_zone
+  tags                    = { Name = "${var.resource_prefix}-PublicSubnet-${each.key}", "kubernetes.io/role/elb" = 1 }
 }
 
+resource "aws_subnet" "internal_subnets" {
+  for_each = {
+    for cidr in var.internal_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(var.internal_subnets_cidr_list, cidr)], -2, -1) => {
+      subnet_cidr_block = cidr
+      availability_zone = data.aws_availability_zones.this.names[index(var.internal_subnets_cidr_list, cidr)]
+    }
+  }
+  vpc_id                  = aws_vpc.base_vpc.id
+  cidr_block              = each.value.subnet_cidr_block
+  map_public_ip_on_launch = false
+  availability_zone       = each.value.availability_zone
+  tags                    = { Name = "${var.resource_prefix}-InternalSubnet-${each.key}", "kubernetes.io/role/internal-elb" = 1 }
+}
+
+resource "aws_subnet" "node_subnets" {
+  for_each = {
+    for cidr in var.node_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(var.node_subnets_cidr_list, cidr)], -2, -1) => {
+      subnet_cidr_block = cidr
+      availability_zone = data.aws_availability_zones.this.names[index(var.node_subnets_cidr_list, cidr)]
+    }
+  }
+  vpc_id                  = aws_vpc.base_vpc.id
+  cidr_block              = each.value.subnet_cidr_block
+  map_public_ip_on_launch = false
+  availability_zone       = each.value.availability_zone
+  tags                    = { Name = "${var.resource_prefix}-NodeSubnet-${each.key}" }
+}
+
+resource "aws_eip" "nat_eips" {
+  for_each = aws_subnet.public_subnets
+}
+
+#resource "null_resource" "this" {
+#  provisioner "local-exec" {
+#    command = <<-EOF
+#      export EKS_REGION=${data.aws_region.this.name}
+#      export VPC_ID=${aws_vpc.base_vpc.id}
+#      export EKS_AZ1=${aws_subnet.node_subnets[0].availability_zone}
+#      export EKS_AZ2=${aws_subnet.node_subnets[1].availability_zone}
+#      export EKS_AZ3=${aws_subnet.node_subnets[2].availability_zone}
+#      export EKS_SUBNET_ID1=${aws_subnet.node_subnets[0].id}
+#      export EKS_SUBNET_ID2=${aws_subnet.node_subnets[1].id}
+#      export EKS_SUBNET_ID3=${aws_subnet.node_subnets[2].id}
+#      envsubst < template/private-cluster.yaml.tmpl > out/private-cluster.yaml
+#    EOF
+#  }
+#  depends_on = [aws_subnet.node_subnets]
+#}
+
 resource "aws_nat_gateway" "nat_gws" {
-  count         = length(var.public_subnets_cidr_list)
-  subnet_id     = aws_subnet.public_subnets[count.index].id
-  allocation_id = aws_eip.nat_eips[count.index].id
+  for_each      = aws_subnet.public_subnets
+  subnet_id     = aws_subnet.public_subnets[each.key].id
+  allocation_id = aws_eip.nat_eips[each.key].id
   depends_on    = [aws_internet_gateway.internet_gw]
-  tags          = { Name = "${var.resource_prefix}-NATGateway${count.index}" }
+  tags          = { Name = "${var.resource_prefix}-NATGateway${each.key}" }
 }
 
 resource "aws_route_table" "public_route_table" {
@@ -84,33 +101,34 @@ resource "aws_route" "public_internet_gateway" {
 }
 
 resource "aws_route_table_association" "pubsub_rt_assoc" {
-  count          = length(var.public_subnets_cidr_list)
-  subnet_id      = aws_subnet.public_subnets[count.index].id
+  for_each       = aws_subnet.public_subnets
+  subnet_id      = aws_subnet.public_subnets[each.key].id
   route_table_id = aws_route_table.public_route_table.id
 }
 
+# Need 1 private route table in each AZ to ensure they point to the correct NAT GW in the same AZ
 resource "aws_route_table" "priv2nat_subnet_route_tables" {
-  vpc_id = aws_vpc.base_vpc.id
-  count  = length(var.public_subnets_cidr_list)
-  tags   = { Name = "${var.resource_prefix}-PrivateToNATSubnetRouteTable${count.index}" }
+  for_each = aws_subnet.public_subnets
+  vpc_id   = aws_vpc.base_vpc.id
+  tags     = { Name = "${var.resource_prefix}-PrivateToNATSubnetRouteTable${each.key}" }
 }
 
 resource "aws_route" "node_route_nat_gateways" {
-  count                  = length(var.public_subnets_cidr_list)
-  route_table_id         = aws_route_table.priv2nat_subnet_route_tables[count.index].id
+  for_each               = aws_route_table.priv2nat_subnet_route_tables
+  route_table_id         = aws_route_table.priv2nat_subnet_route_tables[each.key].id
   destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.nat_gws[count.index].id
+  nat_gateway_id         = aws_nat_gateway.nat_gws[each.key].id
 }
 
 resource "aws_route_table_association" "node_rt_assocs" {
-  count          = length(resource.aws_subnet.node_subnets)
-  subnet_id      = resource.aws_subnet.node_subnets[count.index].id
-  route_table_id = aws_route_table.priv2nat_subnet_route_tables[count.index].id
+  for_each       = aws_subnet.node_subnets
+  subnet_id      = aws_subnet.node_subnets[each.key].id
+  route_table_id = aws_route_table.priv2nat_subnet_route_tables[each.key].id
 }
 resource "aws_route_table_association" "internal_rt_assocs" {
-  count          = length(resource.aws_subnet.internal_subnets)
-  subnet_id      = resource.aws_subnet.internal_subnets[count.index].id
-  route_table_id = aws_route_table.priv2nat_subnet_route_tables[count.index].id
+  for_each       = aws_subnet.internal_subnets
+  subnet_id      = aws_subnet.internal_subnets[each.key].id
+  route_table_id = aws_route_table.priv2nat_subnet_route_tables[each.key].id
 }
 
 resource "aws_security_group" "bastionsecgrp" {
@@ -225,7 +243,7 @@ resource "aws_launch_template" "bastion_launch_template" {
 }
 
 resource "aws_autoscaling_group" "bastion_host_asg" {
-  vpc_zone_identifier = aws_subnet.internal_subnets[*].id
+  vpc_zone_identifier = [for subnet in aws_subnet.internal_subnets : subnet.id]
   desired_capacity    = 1
   max_size            = 1
   min_size            = 1
