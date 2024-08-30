@@ -2,7 +2,7 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 metadata:
   name: private-cluster
-  region: $EKS_REGION 
+  region: ${eks_region}
   version: "1.30"
 privateCluster:
   enabled: true 
@@ -11,15 +11,13 @@ privateCluster:
   - "autoscaling"
   - "logs"
 vpc:
-  id: "$VPC_ID"
+  id: "${vpc_id}"
   subnets:
     private:
-      $EKS_AZ1:
-        id: "$EKS_SUBNET_ID1"
-      $EKS_AZ2:
-        id: "$EKS_SUBNET_ID2"
-      $EKS_AZ3:
-        id: "$EKS_SUBNET_ID3"
+%{ for az, subnetid in nodesubnets ~}
+      ${az}:
+        id: "${subnetid}"
+%{ endfor }
 fargateProfiles:
   - name: fp-default
     selectors:

@@ -3,15 +3,15 @@ variable "vpc_cidr_block" {
   default = "147.206.0.0/16"
 }
 variable "public_subnets_cidr_list" {
-  type    = list(any)
+  type    = list(string)
   default = ["147.206.0.0/22", "147.206.4.0/22", "147.206.8.0/22"]
 }
 variable "internal_subnets_cidr_list" {
-  type    = list(any)
+  type    = list(string)
   default = ["147.206.16.0/22", "147.206.20.0/22", "147.206.24.0/22"]
 }
 variable "node_subnets_cidr_list" {
-  type    = list(any)
+  type    = list(string)
   default = ["147.206.48.0/22", "147.206.52.0/22", "147.206.56.0/22"]
 }
 variable "pubkey_data" {
