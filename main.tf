@@ -1,10 +1,26 @@
+locals {
+  # Get Prefix Length from VPC CIDR
+  vpc_pfxlen   = parseint(regex("/(\\d+)$", var.vpc_config.vpc_cidr)[0], 10)
+  
+  # Calculate subnet size for each type of subnet per AZ, in the order of public subnet, internal subnet and node subnet
+  subnet_sizes = [var.vpc_config.public_subnet_pfxlen - local.vpc_pfxlen, var.vpc_config.internal_subnet_pfxlen - local.vpc_pfxlen, var.vpc_config.node_subnet_pfxlen - local.vpc_pfxlen]
+
+  # Calculate the Subnet CIDRs for each type of subnet, in all AZs
+  subnet_cidrs = cidrsubnets(var.vpc_config.vpc_cidr, flatten([for i in range(var.vpc_config.az_count) : local.subnet_sizes])...)
+
+  # For each type of subnet, build a list of CIDRs for the subnet type in all AZs 
+  public_subnets_cidr_list   = [for idx, val in local.subnet_cidrs : val if idx % 3 == 0]
+  internal_subnets_cidr_list = [for idx, val in local.subnet_cidrs : val if idx % 3 == 1]
+  node_subnets_cidr_list     = [for idx, val in local.subnet_cidrs : val if idx % 3 == 2]
+}
+
 resource "aws_key_pair" "ssh_pubkey" {
   key_name   = "${var.resource_prefix}-ssh-pubkey"
   public_key = var.pubkey_data != null ? var.pubkey_data : (fileexists(var.pubkey_path) ? file(var.pubkey_path) : "")
 }
 
 resource "aws_vpc" "base" {
-  cidr_block           = var.vpc_cidr_block
+  cidr_block           = var.vpc_config.vpc_cidr
   instance_tenancy     = "default"
   enable_dns_hostnames = true
   tags                 = { Name = "${var.resource_prefix}-MainVPC" }
@@ -17,10 +33,10 @@ resource "aws_internet_gateway" "igw" {
 
 resource "aws_subnet" "public_subnets" {
   for_each = {
-    for cidr in var.public_subnets_cidr_list :
-    substr(data.aws_availability_zones.this.names[index(var.public_subnets_cidr_list, cidr)], -2, -1) => {
+    for cidr in local.public_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(local.public_subnets_cidr_list, cidr)], -2, -1) => {
       subnet_cidr_block = cidr
-      availability_zone = data.aws_availability_zones.this.names[index(var.public_subnets_cidr_list, cidr)]
+      availability_zone = data.aws_availability_zones.this.names[index(local.public_subnets_cidr_list, cidr)]
     }
   }
   vpc_id                  = aws_vpc.base.id
@@ -32,10 +48,10 @@ resource "aws_subnet" "public_subnets" {
 
 resource "aws_subnet" "internal_subnets" {
   for_each = {
-    for cidr in var.internal_subnets_cidr_list :
-    substr(data.aws_availability_zones.this.names[index(var.internal_subnets_cidr_list, cidr)], -2, -1) => {
+    for cidr in local.internal_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(local.internal_subnets_cidr_list, cidr)], -2, -1) => {
       subnet_cidr_block = cidr
-      availability_zone = data.aws_availability_zones.this.names[index(var.internal_subnets_cidr_list, cidr)]
+      availability_zone = data.aws_availability_zones.this.names[index(local.internal_subnets_cidr_list, cidr)]
     }
   }
   vpc_id                  = aws_vpc.base.id
@@ -47,10 +63,10 @@ resource "aws_subnet" "internal_subnets" {
 
 resource "aws_subnet" "node_subnets" {
   for_each = {
-    for cidr in var.node_subnets_cidr_list :
-    substr(data.aws_availability_zones.this.names[index(var.node_subnets_cidr_list, cidr)], -2, -1) => {
+    for cidr in local.node_subnets_cidr_list :
+    substr(data.aws_availability_zones.this.names[index(local.node_subnets_cidr_list, cidr)], -2, -1) => {
       subnet_cidr_block = cidr
-      availability_zone = data.aws_availability_zones.this.names[index(var.node_subnets_cidr_list, cidr)]
+      availability_zone = data.aws_availability_zones.this.names[index(local.node_subnets_cidr_list, cidr)]
     }
   }
   vpc_id                  = aws_vpc.base.id
@@ -126,7 +142,7 @@ resource "aws_route_table_association" "internal_rt_assocs" {
 }
 
 resource "aws_security_group" "bastionsecgrp" {
-  name        = "${var.resource_prefix}-cloudkube-sg"
+  name        = "${var.resource_prefix}-bastion-sg"
   description = "security group for bastion"
   vpc_id      = aws_vpc.base.id
 

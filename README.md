@@ -18,57 +18,47 @@ The project was originally used for creating networking foundation for creating 
 
 ## How to use the template
 
-Simply play the Terraform trilogy:
+To provision the VPC:
 ```sh
 terraform init
 terraform plan
 terraform apply
-
-# The apply output includes
-# 1. Bastion Host instance ID
-# 2. Bastion Host Security Group ID
-# 3. Next set of commands to set environment variable
 ```
-The output displays a few additional commands for the next steps for the EKS cluster usecase.
+The apply output includes the Bastion Host instance ID
 
-## Use case 1. Create a private EKS cluster with Fargate using `eksctl`
+## Use case 1. build a private EKS cluster with `eksctl` on top of the VPC
 
-The original use case of this project is to create a private EKS cluster from the [cloudkube](https://github.com/digihunch/cloudkube) project. Once the `apply` step is completed, run the command given on the screen to set environment variables. Then use them to populate the template file:
-
-```sh
-# Load the environment variables, then create private cluster using eksctl
-envsubst < private-cluster.yaml.tmpl | tee | eksctl create cluster -f -
-```
-
-Cluster creation may take more than 20 minutes, with public endpoint disabled at the end and no access to cluster endpoint from outside of the VPC. 
-
-To access the cluster, you may use SOCKS5 proxy to connect from outside of VPC: 
+Once applied, the template generates a YAML manifest in `.out/eks.yaml` directory as an input for `eksctl` utility. The output will display this command to run after the network creation.
 
 ```
-BASTION_SECURITY_GROUP_ID=$(terraform output -raw bastion_sg_id)
+eksctl create cluster -f ./out/eks.yaml
+```
+
+The manifest file is generated from a given template, based on subnet IDs created in the apply process. The EKS Cluster creation may take more than 20 minutes, with public endpoint disabled at the end and no access to cluster endpoint from outside of the VPC. Even though `eksctl` configures `kubectl`, you won't be able to connect to the cluster with it.  
+
+To access this cluster from outside of the VPC (e.g. from your laptop), you may use SOCKS5 proxy, with a few additional steps: 
+
+```
+BASTION_SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --query "SecurityGroups[?contains(GroupName, 'bastion-sg')].GroupId" --output text)
+
 CLUSTER_SECURITY_GROUP_ID=$(aws eks describe-cluster --name private-cluster --query "cluster.resourcesVpcConfig.clusterSecurityGroupId" --output text)
  
 # In Cluster Endpoint's security group, open up port 443 to Bastion host
 aws ec2 authorize-security-group-ingress --group-id $CLUSTER_SECURITY_GROUP_ID --source-group $BASTION_SECURITY_GROUP_ID --protocol tcp --port 443
- 
-# Test with connecting to Bastion host with ssh i-0750643179667a5b6, assuming .ssh/config file is configured as above. From the bastion host, you can test:
-# curl -k https://EC5405EE1846F19F9F61ED28FB12A6A9.sk1.us-west-2.eks.amazonaws.com/api  
-# if you get an HTTP response, even an error code 403, the bastion host has TCP connectivity to cluster endpoint
- 
-# then we can start an SSH session as a SOCKS5 proxy on the remote host
+ ```
+Test with connecting to Bastion host with ssh i-0750643179667a5b6, assuming .ssh/config file is configured as above. Then we can start an SSH session as a SOCKS5 proxy on the remote host
+
+```
 ssh -D 1080 -q -N i-0750643179667a5b6
- 
-# add > /dev/null 2>&1 & to push it to background, or use ctrl+z after running the command
-# to validate that the SOCKS5 proxy is working, you can run the same curl command with a proxy parameter:
-# curl -k https://EC5405EE1846F19F9F61ED28FB12A6A9.sk1.us-west-2.eks.amazonaws.com/api --proxy socks5://localhost:1080
- 
-# you can instruct kubectl to use the SOCKS5 proxy with the following environment variable
+``` 
+You can instruct kubectl to use the SOCKS5 proxy with the following environment variable in a new command terminal:
+```
 export HTTPS_PROXY=socks5://localhost:1080
  
 kubectl get node
 ```
 
-Review [this post](https://www.digihunch.com/2023/06/connect-kubectl-to-private-kubernetes-cluster-in-eks-and-aks/) for more details on how the connectivity work in this model.
+Read [this post](https://www.digihunch.com/2023/06/connect-kubectl-to-private-kubernetes-cluster-in-eks-and-aks/) for more details on how the connectivity works.
 
 ## Use case 2. Create VM for running chat service
 The bastion host can serve as any VM that you need for testing. For example, the [chat-service](https://github.com/digihunch/chat-service) project requires an EC2 instance with GPU. You may use this project by specifying parameters:
