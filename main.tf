@@ -1,7 +1,7 @@
 locals {
   # Get Prefix Length from VPC CIDR
-  vpc_pfxlen   = parseint(regex("/(\\d+)$", var.vpc_config.vpc_cidr)[0], 10)
-  
+  vpc_pfxlen = parseint(regex("/(\\d+)$", var.vpc_config.vpc_cidr)[0], 10)
+
   # Calculate subnet size for each type of subnet per AZ, in the order of public subnet, internal subnet and node subnet
   subnet_sizes = [var.vpc_config.public_subnet_pfxlen - local.vpc_pfxlen, var.vpc_config.internal_subnet_pfxlen - local.vpc_pfxlen, var.vpc_config.node_subnet_pfxlen - local.vpc_pfxlen]
 
@@ -117,15 +117,15 @@ resource "aws_route_table_association" "pubsub_rt_assoc" {
 }
 
 # Need 1 private route table in each AZ to ensure they point to the correct NAT GW in the same AZ
-resource "aws_route_table" "priv2nat_subnet_route_tables" {
+resource "aws_route_table" "private_subnet_route_tables" {
   for_each = aws_subnet.public_subnets
   vpc_id   = aws_vpc.base.id
-  tags     = { Name = "${var.resource_prefix}-PrivateToNATSubnetRouteTable${each.key}" }
+  tags     = { Name = "${var.resource_prefix}-PrivateSubnetRouteTable${each.key}" }
 }
 
 resource "aws_route" "node_route_nat_gateways" {
-  for_each               = aws_route_table.priv2nat_subnet_route_tables
-  route_table_id         = aws_route_table.priv2nat_subnet_route_tables[each.key].id
+  for_each               = aws_route_table.private_subnet_route_tables
+  route_table_id         = aws_route_table.private_subnet_route_tables[each.key].id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.nat_gws[each.key].id
 }
@@ -133,12 +133,19 @@ resource "aws_route" "node_route_nat_gateways" {
 resource "aws_route_table_association" "node_rt_assocs" {
   for_each       = aws_subnet.node_subnets
   subnet_id      = aws_subnet.node_subnets[each.key].id
-  route_table_id = aws_route_table.priv2nat_subnet_route_tables[each.key].id
+  route_table_id = aws_route_table.private_subnet_route_tables[each.key].id
 }
 resource "aws_route_table_association" "internal_rt_assocs" {
   for_each       = aws_subnet.internal_subnets
   subnet_id      = aws_subnet.internal_subnets[each.key].id
-  route_table_id = aws_route_table.priv2nat_subnet_route_tables[each.key].id
+  route_table_id = aws_route_table.private_subnet_route_tables[each.key].id
+}
+
+resource "aws_vpc_endpoint" "s3_gateway_endpoint" {
+  vpc_id            = aws_vpc.base.id
+  service_name      = "com.amazonaws.${data.aws_region.this.name}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [for rt in aws_route_table.private_subnet_route_tables : rt.id]
 }
 
 resource "aws_security_group" "bastionsecgrp" {
