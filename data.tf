@@ -20,10 +20,10 @@ data "aws_ami" "default_ami" {
 }
 
 data "aws_ami" "preferred_ami" {
-  count = var.preferred_ami_id != "" ? 1 : 0
+  count = var.ec2_config.PreferredAmiId != "" ? 1 : 0
   filter {
     name   = "image-id"
-    values = [var.preferred_ami_id]
+    values = [var.ec2_config.PreferredAmiId]
   }
 }
 

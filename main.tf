@@ -16,7 +16,7 @@ locals {
 
 resource "aws_key_pair" "ssh_pubkey" {
   key_name   = "${var.resource_prefix}-ssh-pubkey"
-  public_key = var.pubkey_data != null ? var.pubkey_data : (fileexists(var.pubkey_path) ? file(var.pubkey_path) : "")
+  public_key = var.ec2_config.PublicKeyData != null ? var.ec2_config.PublicKeyData : (fileexists(var.ec2_config.PublicKeyPath) ? file(var.ec2_config.PublicKeyPath) : "")
 }
 
 resource "aws_vpc" "base" {
@@ -229,9 +229,9 @@ resource "aws_iam_instance_profile" "inst_profile" {
 resource "aws_launch_template" "bastion_launch_template" {
   name          = "${var.resource_prefix}-bastion-launch-template"
   key_name      = aws_key_pair.ssh_pubkey.key_name
-  instance_type = var.instance_type
+  instance_type = var.ec2_config.InstanceType
   user_data     = data.cloudinit_config.bastion_cloudinit.rendered
-  image_id      = var.preferred_ami_id != "" ? data.aws_ami.preferred_ami[0].id : data.aws_ami.default_ami.id
+  image_id      = var.ec2_config.PreferredAmiId != "" ? data.aws_ami.preferred_ami[0].id : data.aws_ami.default_ami.id
 
   iam_instance_profile {
     name = aws_iam_instance_profile.inst_profile.name
@@ -242,7 +242,7 @@ resource "aws_launch_template" "bastion_launch_template" {
     http_put_response_hop_limit = 2
   }
   block_device_mappings {
-    device_name = var.preferred_ami_id != "" ? data.aws_ami.preferred_ami[0].root_device_name : data.aws_ami.default_ami.root_device_name
+    device_name = var.ec2_config.PreferredAmiId != "" ? data.aws_ami.preferred_ami[0].root_device_name : data.aws_ami.default_ami.root_device_name
     ebs {
       volume_size = 100
       encrypted   = true
