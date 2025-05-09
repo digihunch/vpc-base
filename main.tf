@@ -43,7 +43,7 @@ resource "aws_subnet" "public_subnets" {
   cidr_block              = each.value.subnet_cidr_block
   map_public_ip_on_launch = true
   availability_zone       = each.value.availability_zone
-  tags                    = { Name = "${var.resource_prefix}-PublicSubnet-${each.key}", "kubernetes.io/role/elb" = 1 }
+  tags                    = { Name = "${var.resource_prefix}-PublicSubnet-${each.key}", "kubernetes.io/role/elb" = 1, Purpose="Public" }
 }
 
 resource "aws_subnet" "internal_subnets" {
@@ -58,7 +58,7 @@ resource "aws_subnet" "internal_subnets" {
   cidr_block              = each.value.subnet_cidr_block
   map_public_ip_on_launch = false
   availability_zone       = each.value.availability_zone
-  tags                    = { Name = "${var.resource_prefix}-InternalSubnet-${each.key}", "kubernetes.io/role/internal-elb" = 1 }
+  tags                    = { Name = "${var.resource_prefix}-InternalSubnet-${each.key}", "kubernetes.io/role/internal-elb" = 1, Purpose="Internal" }
 }
 
 resource "aws_subnet" "node_subnets" {
@@ -73,7 +73,7 @@ resource "aws_subnet" "node_subnets" {
   cidr_block              = each.value.subnet_cidr_block
   map_public_ip_on_launch = false
   availability_zone       = each.value.availability_zone
-  tags                    = { Name = "${var.resource_prefix}-NodeSubnet-${each.key}" }
+  tags                    = { Name = "${var.resource_prefix}-NodeSubnet-${each.key}", Purpose="Node" }
 }
 
 resource "local_file" "eksctl_yaml" {
